@@ -1,17 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
-import { Expense, ExpenseType } from '../../models/expense.model';
+import { Expense, ExpenseSource, ExpenseType } from '../../models/expense.model';
 import { Category } from '../../models/category.model';
 import { Bank } from '../../models/bank.model';
-import { Subscription } from '../../models/subscription.model';
-import { Installment } from '../../models/installment.model';
+import { SubscriptionOccurrence } from '../../models/subscription-occurrence.model';
+import { InstallmentOccurrence } from '../../models/installment-occurrence.model';
+import { OccurrenceStatus } from '../../models/occurrence-status.enum';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { CategoriesService } from '../categories/categories.service';
 import { BanksService } from '../banks/banks.service';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-import { InstallmentsService } from '../installments/installments.service';
 import { ExpenseCreationAttributes } from '../../types/interfaces';
 import { parseFrenchDate } from '../../utils';
 
@@ -20,56 +19,39 @@ export class ExpensesService {
   constructor(
     @InjectModel(Expense)
     private expenseModel: typeof Expense,
+    @InjectModel(SubscriptionOccurrence)
+    private subscriptionOccurrenceModel: typeof SubscriptionOccurrence,
+    @InjectModel(InstallmentOccurrence)
+    private installmentOccurrenceModel: typeof InstallmentOccurrence,
     private categoriesService: CategoriesService,
     private banksService: BanksService,
-    private subscriptionsService: SubscriptionsService,
-    private installmentsService: InstallmentsService,
   ) {}
 
   async create(createExpenseDto: CreateExpenseDto): Promise<Expense> {
-    // Vérifier que la catégorie et la banque existent
     await this.categoriesService.findOne(createExpenseDto.categoryId);
     await this.banksService.findOne(createExpenseDto.bankId);
+    await this.validateOccurrenceForExpense(createExpenseDto.type, createExpenseDto.occurrenceId);
 
-    // Vérifications spécifiques selon le type
-    if (createExpenseDto.type === ExpenseType.SUBSCRIPTION) {
-      if (!createExpenseDto.subscriptionId) {
-        throw new BadRequestException('subscriptionId est requis pour les dépenses d\'abonnement');
-      }
-      await this.subscriptionsService.findOne(createExpenseDto.subscriptionId);
-    }
-
-    if (createExpenseDto.type === ExpenseType.INSTALLMENT) {
-      if (!createExpenseDto.installmentId) {
-        throw new BadRequestException('installmentId est requis pour les dépenses échelonnées');
-      }
-      await this.installmentsService.findOne(createExpenseDto.installmentId);
-    }
-
-    // Préparer les données pour Sequelize avec conversion de date
     const expenseData: ExpenseCreationAttributes = {
       amount: createExpenseDto.amount,
       description: createExpenseDto.description,
+      color: createExpenseDto.color,
+      source: createExpenseDto.source ?? ExpenseSource.MANUAL,
       type: createExpenseDto.type,
       categoryId: createExpenseDto.categoryId,
       bankId: createExpenseDto.bankId,
       date: createExpenseDto.date ? parseFrenchDate(createExpenseDto.date) : new Date(),
-      subscriptionId: createExpenseDto.subscriptionId,
-      installmentId: createExpenseDto.installmentId,
+      occurrenceId: createExpenseDto.occurrenceId,
     };
 
-    return this.expenseModel.create(expenseData);
+    const expense = await this.expenseModel.create(expenseData);
+    await this.markOccurrenceAsPaid(expense);
+    return this.findOne(expense.id);
   }
-
 
   async findAll(): Promise<Expense[]> {
     return this.expenseModel.findAll({
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
       order: [['date', 'DESC']],
     });
   }
@@ -78,15 +60,10 @@ export class ExpensesService {
     return this.expenseModel.findAll({
       where: {
         date: {
-          [Op.between]: [new Date(startDate), new Date(endDate)],
+          [Op.between]: [parseFrenchDate(startDate), parseFrenchDate(endDate)],
         },
       },
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
       order: [['date', 'DESC']],
     });
   }
@@ -102,12 +79,7 @@ export class ExpensesService {
           [Op.between]: [startOfDay, endOfDay],
         },
       },
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
       order: [['date', 'DESC']],
     });
   }
@@ -115,12 +87,7 @@ export class ExpensesService {
   async findByCategory(categoryId: number): Promise<Expense[]> {
     return this.expenseModel.findAll({
       where: { categoryId },
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
       order: [['date', 'DESC']],
     });
   }
@@ -128,12 +95,7 @@ export class ExpensesService {
   async findByBank(bankId: number): Promise<Expense[]> {
     return this.expenseModel.findAll({
       where: { bankId },
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
       order: [['date', 'DESC']],
     });
   }
@@ -141,28 +103,18 @@ export class ExpensesService {
   async findByType(type: ExpenseType): Promise<Expense[]> {
     return this.expenseModel.findAll({
       where: { type },
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
       order: [['date', 'DESC']],
     });
   }
 
   async findOne(id: number): Promise<Expense> {
     const expense = await this.expenseModel.findByPk(id, {
-      include: [
-        { model: Category, as: 'category' },
-        { model: Bank, as: 'bank' },
-        { model: Subscription, as: 'subscription', required: false },
-        { model: Installment, as: 'installment', required: false },
-      ],
+      include: this.defaultIncludes(),
     });
 
     if (!expense) {
-      throw new NotFoundException(`Dépense avec l'ID ${id} non trouvée`);
+      throw new NotFoundException(`Depense avec l'ID ${id} non trouvee`);
     }
 
     return expense;
@@ -170,8 +122,9 @@ export class ExpensesService {
 
   async update(id: number, updateExpenseDto: UpdateExpenseDto): Promise<Expense> {
     const expense = await this.findOne(id);
+    const nextType = updateExpenseDto.type ?? expense.type;
+    const nextOccurrenceId = updateExpenseDto.occurrenceId ?? expense.occurrenceId ?? undefined;
 
-    // Vérifications si les IDs sont modifiés
     if (updateExpenseDto.categoryId && updateExpenseDto.categoryId !== expense.categoryId) {
       await this.categoriesService.findOne(updateExpenseDto.categoryId);
     }
@@ -180,33 +133,29 @@ export class ExpensesService {
       await this.banksService.findOne(updateExpenseDto.bankId);
     }
 
-    if (updateExpenseDto.subscriptionId && updateExpenseDto.subscriptionId !== expense.subscriptionId) {
-      await this.subscriptionsService.findOne(updateExpenseDto.subscriptionId);
-    }
+    await this.validateOccurrenceForExpense(nextType, nextOccurrenceId, expense.id);
 
-    if (updateExpenseDto.installmentId && updateExpenseDto.installmentId !== expense.installmentId) {
-      await this.installmentsService.findOne(updateExpenseDto.installmentId);
-    }
-
-    // Préparer les données de mise à jour avec conversion de date
     const updateData: Partial<ExpenseCreationAttributes> = {};
-    
-    // Copier les propriétés modifiées
+
     if (updateExpenseDto.amount !== undefined) updateData.amount = updateExpenseDto.amount;
-    if (updateExpenseDto.description !== undefined) updateData.description = updateExpenseDto.description;
+    if (updateExpenseDto.description !== undefined)
+      updateData.description = updateExpenseDto.description;
+    if (updateExpenseDto.color !== undefined) updateData.color = updateExpenseDto.color;
+    if (updateExpenseDto.source !== undefined) updateData.source = updateExpenseDto.source;
     if (updateExpenseDto.type !== undefined) updateData.type = updateExpenseDto.type;
-    if (updateExpenseDto.categoryId !== undefined) updateData.categoryId = updateExpenseDto.categoryId;
+    if (updateExpenseDto.categoryId !== undefined)
+      updateData.categoryId = updateExpenseDto.categoryId;
     if (updateExpenseDto.bankId !== undefined) updateData.bankId = updateExpenseDto.bankId;
-    if (updateExpenseDto.subscriptionId !== undefined) updateData.subscriptionId = updateExpenseDto.subscriptionId;
-    if (updateExpenseDto.installmentId !== undefined) updateData.installmentId = updateExpenseDto.installmentId;
-    
-    // Convertir la date string en objet Date si fournie
+    if (updateExpenseDto.occurrenceId !== undefined)
+      updateData.occurrenceId = updateExpenseDto.occurrenceId;
+
     if (updateExpenseDto.date) {
       updateData.date = parseFrenchDate(updateExpenseDto.date);
     }
 
     await expense.update(updateData);
-    return expense;
+    await this.markOccurrenceAsPaid(expense);
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
@@ -219,11 +168,14 @@ export class ExpensesService {
       include: [{ model: Category, as: 'category' }],
     });
 
-    const totals = expenses.reduce((acc, expense) => {
-      const categoryName = expense.category.name;
-      acc[categoryName] = (acc[categoryName] || 0) + Number(expense.amount);
-      return acc;
-    }, {} as Record<string, number>);
+    const totals = expenses.reduce(
+      (acc, expense) => {
+        const categoryName = expense.category.name;
+        acc[categoryName] = (acc[categoryName] || 0) + Number(expense.amount);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return Object.entries(totals).map(([categoryName, total]) => ({
       categoryName,
@@ -236,11 +188,14 @@ export class ExpensesService {
       include: [{ model: Bank, as: 'bank' }],
     });
 
-    const totals = expenses.reduce((acc, expense) => {
-      const bankName = expense.bank.name;
-      acc[bankName] = (acc[bankName] || 0) + Number(expense.amount);
-      return acc;
-    }, {} as Record<string, number>);
+    const totals = expenses.reduce(
+      (acc, expense) => {
+        const bankName = expense.bank.name;
+        acc[bankName] = (acc[bankName] || 0) + Number(expense.amount);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return Object.entries(totals).map(([bankName, total]) => ({
       bankName,
@@ -261,5 +216,64 @@ export class ExpensesService {
     });
 
     return expenses.reduce((total, expense) => total + Number(expense.amount), 0);
+  }
+
+  private defaultIncludes() {
+    return [
+      { model: Category, as: 'category' },
+      { model: Bank, as: 'bank' },
+    ];
+  }
+
+  private async validateOccurrenceForExpense(
+    type: ExpenseType,
+    occurrenceId?: number | null,
+    currentExpenseId?: number,
+  ): Promise<void> {
+    if (type === ExpenseType.SIMPLE) {
+      if (occurrenceId) {
+        throw new BadRequestException('Une depense simple ne doit pas avoir occurrenceId');
+      }
+      return;
+    }
+
+    if (!occurrenceId) {
+      throw new BadRequestException('occurrenceId est requis pour les depenses periodiques');
+    }
+
+    const occurrence =
+      type === ExpenseType.SUBSCRIPTION
+        ? await this.subscriptionOccurrenceModel.findByPk(occurrenceId)
+        : await this.installmentOccurrenceModel.findByPk(occurrenceId);
+
+    if (!occurrence) {
+      throw new NotFoundException(`Occurrence avec l'ID ${occurrenceId} non trouvee`);
+    }
+
+    if (occurrence.expenseId && occurrence.expenseId !== currentExpenseId) {
+      throw new BadRequestException('Cette occurrence est deja liee a une depense');
+    }
+  }
+
+  private async markOccurrenceAsPaid(expense: Expense): Promise<void> {
+    if (!expense.occurrenceId || expense.type === ExpenseType.SIMPLE) {
+      return;
+    }
+
+    const values = {
+      expenseId: expense.id,
+      paidDate: expense.date,
+      status: OccurrenceStatus.PAID,
+      amount: expense.amount,
+    };
+
+    if (expense.type === ExpenseType.SUBSCRIPTION) {
+      await this.subscriptionOccurrenceModel.update(values, {
+        where: { id: expense.occurrenceId },
+      });
+      return;
+    }
+
+    await this.installmentOccurrenceModel.update(values, { where: { id: expense.occurrenceId } });
   }
 }
