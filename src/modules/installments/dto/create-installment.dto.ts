@@ -1,20 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { 
-  IsString, 
-  IsNumber, 
-  IsInt, 
-  IsDateString, 
-  IsOptional, 
+import {
   IsBoolean,
-  MinLength, 
-  MaxLength, 
-  Min 
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
 } from 'class-validator';
 import { IsFrenchDate, IsFrenchDateArray } from '../../../utils';
 
 export class CreateInstallmentDto {
-  @ApiProperty({ 
-    description: 'Nom du paiement échelonné',
+  @ApiProperty({
+    description: 'Nom du paiement echelonne',
     example: 'iPhone 15 Pro',
     minLength: 1,
     maxLength: 200,
@@ -24,8 +23,8 @@ export class CreateInstallmentDto {
   @MaxLength(200)
   name: string;
 
-  @ApiProperty({ 
-    description: 'Montant total du paiement échelonné',
+  @ApiProperty({
+    description: 'Montant total du paiement echelonne',
     example: 1199.99,
     minimum: 0,
   })
@@ -33,16 +32,7 @@ export class CreateInstallmentDto {
   @Min(0)
   totalAmount: number;
 
-  @ApiProperty({ 
-    description: 'Montant restant à payer',
-    example: 1199.99,
-    minimum: 0,
-  })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  remainingAmount: number;
-
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Nombre total de paiements',
     example: 12,
     minimum: 1,
@@ -51,17 +41,15 @@ export class CreateInstallmentDto {
   @Min(1)
   numberOfPayments: number;
 
-  @ApiProperty({ 
-    description: 'Nombre de paiements restants',
-    example: 12,
-    minimum: 0,
+  @ApiProperty({
+    description: 'Date de debut du paiement echelonne',
+    example: '01/02/2024',
   })
-  @IsInt()
-  @Min(0)
-  remainingPayments: number;
+  @IsFrenchDate()
+  startDate: string;
 
-  @ApiProperty({ 
-    description: 'Date du prochain paiement',
+  @ApiProperty({
+    description: 'Date du prochain paiement, conservee pour compatibilite',
     example: '01/02/2024',
     required: false,
   })
@@ -69,8 +57,8 @@ export class CreateInstallmentDto {
   @IsFrenchDate()
   nextPaymentDate?: string;
 
-  @ApiProperty({ 
-    description: 'Dates personnalisées de tous les paiements',
+  @ApiProperty({
+    description: 'Dates personnalisees de tous les paiements',
     example: ['01/02/2024', '01/03/2024', '01/04/2024'],
     required: false,
     type: [String],
@@ -79,12 +67,32 @@ export class CreateInstallmentDto {
   @IsFrenchDateArray()
   customPaymentDates?: string[];
 
-  @ApiProperty({ 
-    description: 'Indique si le paiement échelonné est terminé',
+  @ApiProperty({
+    description: 'Indique si le paiement echelonne est termine',
     example: false,
     default: false,
   })
   @IsOptional()
   @IsBoolean()
   isCompleted?: boolean;
+
+  @ApiProperty({
+    description: 'ID de la categorie',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  categoryId?: number;
+
+  @ApiProperty({
+    description: 'ID de la banque',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  bankId?: number;
 }
