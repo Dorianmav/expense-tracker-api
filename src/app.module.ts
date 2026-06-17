@@ -12,6 +12,7 @@ import { Bank } from './models/bank.model';
 import { Subscription } from './models/subscription.model';
 import { Installment } from './models/installment.model';
 import { Expense } from './models/expense.model';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -43,6 +44,8 @@ import { Expense } from './models/expense.model';
 
     // Modèles pour le seeding
     SequelizeModule.forFeature([Category, Bank, Subscription, Installment, Expense]),
+
+    AuthModule,
   ],
   controllers: [],
   providers: [SeedService],

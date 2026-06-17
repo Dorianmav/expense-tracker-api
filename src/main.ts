@@ -32,6 +32,8 @@ async function bootstrap() {
     .addTag('banks', 'Gestion des banques')
     .addTag('subscriptions', 'Gestion des abonnements')
     .addTag('installments', 'Gestion des paiements échelonnés')
+    .addBearerAuth()
+    .addSecurityRequirements('bearer')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
