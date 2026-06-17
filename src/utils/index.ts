@@ -5,6 +5,7 @@
 
 // Utilitaires de dates
 export * from './date.utils';
+export * from './occurrence.utils';
 
 // Validateurs personnalisés
 export * from './validators/french-date.validator';

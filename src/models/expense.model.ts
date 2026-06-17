@@ -13,8 +13,6 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { Category } from './category.model';
 import { Bank } from './bank.model';
-import { Subscription } from './subscription.model';
-import { Installment } from './installment.model';
 import { ExpenseCreationAttributes } from '../types/interfaces';
 
 export enum ExpenseType {
@@ -23,41 +21,59 @@ export enum ExpenseType {
   INSTALLMENT = 'installment',
 }
 
+export enum ExpenseSource {
+  MANUAL = 'manual',
+  BANK_IMPORT = 'bank_import',
+}
+
 @Table({
   tableName: 'expenses',
   timestamps: true,
 })
 export class Expense extends Model<Expense, ExpenseCreationAttributes> {
-  @ApiProperty({ description: 'ID unique de la dépense' })
+  @ApiProperty({ description: 'ID unique de la depense' })
   @PrimaryKey
   @AutoIncrement
   @Column(DataType.INTEGER)
   declare id: number;
 
-  @ApiProperty({ description: 'Montant de la dépense' })
+  @ApiProperty({ description: 'Montant de la depense', example: 25.99 })
   @Column({
     type: DataType.DECIMAL(10, 2),
     allowNull: false,
   })
   declare amount: number;
 
-  @ApiProperty({ description: 'Date de la dépense' })
+  @ApiProperty({ description: 'Date de la depense au format DD/MM/YYYY', example: '24/09/2025' })
   @Column({
     type: DataType.DATE,
     allowNull: false,
   })
   declare date: Date;
 
-  @ApiProperty({ description: 'Description de la dépense' })
+  @ApiProperty({ description: 'Description de la depense', example: 'Courses du weekend' })
   @Column({
     type: DataType.STRING(500),
     allowNull: false,
   })
   declare description: string;
 
-  @ApiProperty({ 
-    description: 'Type de dépense',
+  @ApiProperty({
+    description: 'Couleur optionnelle de la depense',
+    example: '#2F80ED',
+    required: false,
+    nullable: true,
+  })
+  @Column({
+    type: DataType.STRING(20),
+    allowNull: true,
+  })
+  declare color: string | null;
+
+  @ApiProperty({
+    description: 'Type de depense',
     enum: ExpenseType,
+    example: ExpenseType.SIMPLE,
   })
   @Column({
     type: DataType.ENUM(...Object.values(ExpenseType)),
@@ -66,59 +82,62 @@ export class Expense extends Model<Expense, ExpenseCreationAttributes> {
   })
   declare type: ExpenseType;
 
-  @ApiProperty({ description: 'ID de la catégorie' })
-  @ForeignKey(() => require('./category.model').Category)
+  @ApiProperty({
+    description: 'Source de la depense',
+    enum: ExpenseSource,
+    example: ExpenseSource.MANUAL,
+  })
+  @Column({
+    type: DataType.ENUM(...Object.values(ExpenseSource)),
+    allowNull: false,
+    defaultValue: ExpenseSource.MANUAL,
+  })
+  declare source: ExpenseSource;
+
+  @ApiProperty({ description: 'ID de la categorie', example: 1 })
+  @ForeignKey(() => Category)
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
   })
   declare categoryId: number;
 
-  @ApiProperty({ description: 'ID de la banque' })
-  @ForeignKey(() => require('./bank.model').Bank)
+  @ApiProperty({ description: 'ID de la banque', example: 1 })
+  @ForeignKey(() => Bank)
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
   })
   declare bankId: number;
 
-  @ApiProperty({ description: 'ID de l\'abonnement (si applicable)', required: false })
-  @ForeignKey(() => require('./subscription.model').Subscription)
+  @ApiProperty({
+    description: 'ID de l occurrence payee, selon le type',
+    example: null,
+    required: false,
+    nullable: true,
+  })
   @Column({
     type: DataType.INTEGER,
     allowNull: true,
   })
-  declare subscriptionId: number;
+  declare occurrenceId: number | null;
 
-  @ApiProperty({ description: 'ID du paiement échelonné (si applicable)', required: false })
-  @ForeignKey(() => require('./installment.model').Installment)
-  @Column({
-    type: DataType.INTEGER,
-    allowNull: true,
-  })
-  declare installmentId: number;
-
-  @ApiProperty({ description: 'Catégorie associée', required: false })
-  @BelongsTo(() => require('./category.model').Category)
+  @ApiProperty({ description: 'Categorie associee', required: false })
+  @BelongsTo(() => Category)
   declare category: Category;
 
-  @ApiProperty({ description: 'Banque associée', required: false })
-  @BelongsTo(() => require('./bank.model').Bank)
+  @ApiProperty({ description: 'Banque associee', required: false })
+  @BelongsTo(() => Bank)
   declare bank: Bank;
 
-  @ApiProperty({ description: 'Abonnement associé (si applicable)', required: false })
-  @BelongsTo(() => require('./subscription.model').Subscription)
-  declare subscription: Subscription;
-
-  @ApiProperty({ description: 'Paiement échelonné associé (si applicable)', required: false })
-  @BelongsTo(() => require('./installment.model').Installment)
-  declare installment: Installment;
-
-  @ApiProperty({ description: 'Date de création' })
+  @ApiProperty({ description: 'Date de creation', example: '2025-09-25T17:51:06.539Z' })
   @CreatedAt
   declare createdAt: Date;
 
-  @ApiProperty({ description: 'Date de dernière modification' })
+  @ApiProperty({
+    description: 'Date de derniere modification',
+    example: '2025-09-25T17:51:06.539Z',
+  })
   @UpdatedAt
   declare updatedAt: Date;
 }

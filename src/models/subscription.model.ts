@@ -5,17 +5,23 @@ import {
   DataType,
   PrimaryKey,
   AutoIncrement,
+  ForeignKey,
+  BelongsTo,
   HasMany,
   CreatedAt,
   UpdatedAt,
 } from 'sequelize-typescript';
 import { ApiProperty } from '@nestjs/swagger';
-import { Expense } from './expense.model';
+import { Bank } from './bank.model';
+import { Category } from './category.model';
+import { SubscriptionOccurrence } from './subscription-occurrence.model';
 import { SubscriptionCreationAttributes } from '../types/interfaces';
 
 export enum SubscriptionFrequency {
   WEEKLY = 'weekly',
+  BIWEEKLY = 'biweekly',
   MONTHLY = 'monthly',
+  QUARTERLY = 'quarterly',
   YEARLY = 'yearly',
 }
 
@@ -24,29 +30,30 @@ export enum SubscriptionFrequency {
   timestamps: true,
 })
 export class Subscription extends Model<Subscription, SubscriptionCreationAttributes> {
-  @ApiProperty({ description: 'ID unique de l\'abonnement' })
+  @ApiProperty({ description: 'ID unique de l abonnement' })
   @PrimaryKey
   @AutoIncrement
   @Column(DataType.INTEGER)
   declare id: number;
 
-  @ApiProperty({ description: 'Nom de l\'abonnement' })
+  @ApiProperty({ description: 'Nom de l abonnement', example: 'Netflix Premium' })
   @Column({
     type: DataType.STRING(200),
     allowNull: false,
   })
   declare name: string;
 
-  @ApiProperty({ description: 'Montant de l\'abonnement' })
+  @ApiProperty({ description: 'Montant de l abonnement', example: 15.99 })
   @Column({
     type: DataType.DECIMAL(10, 2),
     allowNull: false,
   })
   declare amount: number;
 
-  @ApiProperty({ 
-    description: 'Fréquence de l\'abonnement',
+  @ApiProperty({
+    description: 'Frequence de l abonnement',
     enum: SubscriptionFrequency,
+    example: SubscriptionFrequency.MONTHLY,
   })
   @Column({
     type: DataType.ENUM(...Object.values(SubscriptionFrequency)),
@@ -55,21 +62,55 @@ export class Subscription extends Model<Subscription, SubscriptionCreationAttrib
   })
   declare frequency: SubscriptionFrequency;
 
-  @ApiProperty({ description: 'Date de début de l\'abonnement' })
+  @ApiProperty({
+    description: 'Jour du mois pour les frequences mensuelles',
+    example: 14,
+    required: false,
+    nullable: true,
+  })
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+    validate: { min: 1, max: 31 },
+  })
+  declare dayOfMonth: number | null;
+
+  @ApiProperty({
+    description: 'Jour de la semaine pour les frequences hebdomadaires',
+    example: null,
+    required: false,
+    nullable: true,
+  })
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+    validate: { min: 0, max: 6 },
+  })
+  declare dayOfWeek: number | null;
+
+  @ApiProperty({
+    description: 'Date de debut de l abonnement au format DD/MM/YYYY',
+    example: '14/01/2024',
+  })
   @Column({
     type: DataType.DATE,
     allowNull: false,
   })
   declare startDate: Date;
 
-  @ApiProperty({ description: 'Date de fin de l\'abonnement (optionnelle)', required: false })
+  @ApiProperty({
+    description: 'Date de fin de l abonnement au format DD/MM/YYYY',
+    example: null,
+    required: false,
+    nullable: true,
+  })
   @Column({
     type: DataType.DATE,
     allowNull: true,
   })
-  declare endDate: Date;
+  declare endDate: Date | null;
 
-  @ApiProperty({ description: 'Indique si l\'abonnement est actif' })
+  @ApiProperty({ description: 'Indique si l abonnement est actif', example: true })
   @Column({
     type: DataType.BOOLEAN,
     allowNull: false,
@@ -77,15 +118,42 @@ export class Subscription extends Model<Subscription, SubscriptionCreationAttrib
   })
   declare isActive: boolean;
 
-  @ApiProperty({ description: 'Dépenses associées à cet abonnement', required: false })
-  @HasMany(() => require('./expense.model').Expense)
-  declare expenses: Expense[];
+  @ApiProperty({ description: 'ID de la categorie', example: 1, required: false, nullable: true })
+  @ForeignKey(() => Category)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+  })
+  declare categoryId: number | null;
 
-  @ApiProperty({ description: 'Date de création' })
+  @ApiProperty({ description: 'ID de la banque', example: 1, required: false, nullable: true })
+  @ForeignKey(() => Bank)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+  })
+  declare bankId: number | null;
+
+  @ApiProperty({ description: 'Categorie associee', required: false })
+  @BelongsTo(() => Category)
+  declare category: Category;
+
+  @ApiProperty({ description: 'Banque associee', required: false })
+  @BelongsTo(() => Bank)
+  declare bank: Bank;
+
+  @ApiProperty({ description: 'Occurrences associees a cet abonnement', required: false })
+  @HasMany(() => SubscriptionOccurrence)
+  declare occurrences: SubscriptionOccurrence[];
+
+  @ApiProperty({ description: 'Date de creation', example: '2025-09-25T17:51:06.539Z' })
   @CreatedAt
   declare createdAt: Date;
 
-  @ApiProperty({ description: 'Date de dernière modification' })
+  @ApiProperty({
+    description: 'Date de derniere modification',
+    example: '2025-09-25T17:51:06.539Z',
+  })
   @UpdatedAt
   declare updatedAt: Date;
 }
