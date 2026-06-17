@@ -3,7 +3,6 @@ import {
   IsString, 
   IsNumber, 
   IsEnum, 
-  IsDateString, 
   IsInt,
   IsOptional,
   MinLength, 
@@ -11,6 +10,7 @@ import {
   Min 
 } from 'class-validator';
 import { ExpenseType } from '../../../models/expense.model';
+import { IsFrenchDate } from '../../../utils';
 
 export class CreateExpenseDto {
   @ApiProperty({ 
@@ -23,10 +23,10 @@ export class CreateExpenseDto {
   amount: number;
 
   @ApiProperty({ 
-    description: 'Date de la dépense',
+    description: 'Date de la dépense au format DD/MM/YYYY',
     example: '15/01/2024',
   })
-  @IsDateString()
+  @IsFrenchDate()
   date: string;
 
   @ApiProperty({ 

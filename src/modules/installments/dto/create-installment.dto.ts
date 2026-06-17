@@ -10,6 +10,7 @@ import {
   MaxLength, 
   Min 
 } from 'class-validator';
+import { IsFrenchDate, IsFrenchDateArray } from '../../../utils';
 
 export class CreateInstallmentDto {
   @ApiProperty({ 
@@ -65,7 +66,7 @@ export class CreateInstallmentDto {
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFrenchDate()
   nextPaymentDate?: string;
 
   @ApiProperty({ 
@@ -75,7 +76,7 @@ export class CreateInstallmentDto {
     type: [String],
   })
   @IsOptional()
-  @IsDateString({}, { each: true })
+  @IsFrenchDateArray()
   customPaymentDates?: string[];
 
   @ApiProperty({ 

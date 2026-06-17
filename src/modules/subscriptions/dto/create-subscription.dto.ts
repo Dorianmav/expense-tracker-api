@@ -3,7 +3,6 @@ import {
   IsString, 
   IsNumber, 
   IsEnum, 
-  IsDateString, 
   IsOptional, 
   IsBoolean,
   MinLength, 
@@ -11,6 +10,7 @@ import {
   Min 
 } from 'class-validator';
 import { SubscriptionFrequency } from '../../../models/subscription.model';
+import { IsFrenchDate } from '../../../utils';
 
 export class CreateSubscriptionDto {
   @ApiProperty({ 
@@ -45,16 +45,16 @@ export class CreateSubscriptionDto {
     description: 'Date de début de l\'abonnement',
     example: '01/01/2024',
   })
-  @IsDateString()
+  @IsFrenchDate()
   startDate: string;
 
   @ApiProperty({ 
-    description: 'Date de fin de l\'abonnement (optionnelle)',
+    description: 'Date de fin de l\'abonnement au format DD/MM/YYYY (optionnelle)',
     example: '31/12/2024',
     required: false,
   })
   @IsOptional()
-  @IsDateString()
+  @IsFrenchDate()
   endDate?: string;
 
   @ApiProperty({ 
