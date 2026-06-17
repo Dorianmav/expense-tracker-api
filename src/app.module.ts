@@ -6,12 +6,15 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { BanksModule } from './modules/banks/banks.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { InstallmentsModule } from './modules/installments/installments.module';
+import { CalendarModule } from './modules/calendar/calendar.module';
 import { SeedService } from './seeders/seed-data';
 import { Category } from './models/category.model';
 import { Bank } from './models/bank.model';
 import { Subscription } from './models/subscription.model';
 import { Installment } from './models/installment.model';
 import { Expense } from './models/expense.model';
+import { SubscriptionOccurrence } from './models/subscription-occurrence.model';
+import { InstallmentOccurrence } from './models/installment-occurrence.model';
 import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
@@ -41,9 +44,18 @@ import { AuthModule } from './modules/auth/auth.module';
     BanksModule,
     SubscriptionsModule,
     InstallmentsModule,
+    CalendarModule,
 
     // Modèles pour le seeding
-    SequelizeModule.forFeature([Category, Bank, Subscription, Installment, Expense]),
+    SequelizeModule.forFeature([
+      Category,
+      Bank,
+      Subscription,
+      Installment,
+      Expense,
+      SubscriptionOccurrence,
+      InstallmentOccurrence,
+    ]),
 
     AuthModule,
   ],
