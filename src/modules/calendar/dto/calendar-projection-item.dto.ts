@@ -55,4 +55,20 @@ export class CalendarProjectionItemDto {
 
   @ApiProperty({ description: 'Montant prevu ou reel', example: 15.99 })
   amount: number;
+
+  @ApiProperty({ description: 'ID de la categorie associee', example: 1, nullable: true })
+  categoryId: number | null;
+
+  @ApiProperty({
+    description: 'Nom de la categorie associee',
+    example: 'Streaming',
+    nullable: true,
+  })
+  categoryName: string | null;
+
+  @ApiProperty({ description: 'ID de la banque associee', example: 1, nullable: true })
+  bankId: number | null;
+
+  @ApiProperty({ description: 'Nom de la banque associee', example: 'BNP Paribas', nullable: true })
+  bankName: string | null;
 }

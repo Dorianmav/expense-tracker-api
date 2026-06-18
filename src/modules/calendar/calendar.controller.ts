@@ -1,8 +1,22 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  ParseIntPipe,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { OccurrenceStatus } from '../../models/occurrence-status.enum';
 import { CalendarService } from './calendar.service';
-import { CalendarProjectionItemDto } from './dto/calendar-projection-item.dto';
+import {
+  CalendarProjectionItemDto,
+  CalendarProjectionKind,
+} from './dto/calendar-projection-item.dto';
 import { CalendarProjectionQueryDto } from './dto/calendar-projection-query.dto';
+import { UpdateOccurrenceStatusDto } from './dto/update-occurrence-status.dto';
 
 @ApiTags('calendar')
 @Controller('calendar')
@@ -24,5 +38,25 @@ export class CalendarController {
   })
   getProjection(@Query() query: CalendarProjectionQueryDto): Promise<CalendarProjectionItemDto[]> {
     return this.calendarService.getProjection(query);
+  }
+
+  @Patch('occurrences/:kind/:id/status')
+  @ApiOperation({ summary: 'Mettre a jour le statut d une occurrence calendrier' })
+  @ApiResponse({
+    status: 200,
+    description: 'Statut mis a jour',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { enum: Object.values(OccurrenceStatus) },
+      },
+    },
+  })
+  updateOccurrenceStatus(
+    @Param('kind', new ParseEnumPipe(CalendarProjectionKind)) kind: CalendarProjectionKind,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateOccurrenceStatusDto,
+  ): Promise<{ status: OccurrenceStatus }> {
+    return this.calendarService.updateOccurrenceStatus(kind, id, body.status);
   }
 }
