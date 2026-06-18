@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
+import { Bank } from '../../models/bank.model';
+import { Category } from '../../models/category.model';
 import { Installment } from '../../models/installment.model';
 import { InstallmentOccurrence } from '../../models/installment-occurrence.model';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
@@ -44,16 +46,22 @@ export class InstallmentsService {
   }
 
   async findAll(): Promise<Installment[]> {
+    await this.markOverdueOccurrences();
+
     return this.installmentModel.findAll({
-      include: [{ model: InstallmentOccurrence, as: 'occurrences', required: false }],
+      include: this.defaultIncludes(),
       order: [['name', 'ASC']],
     });
   }
 
   async findActive(): Promise<Installment[]> {
+    await this.markOverdueOccurrences();
+
     return this.installmentModel.findAll({
       where: { isCompleted: false },
       include: [
+        { model: Category, as: 'category', required: false },
+        { model: Bank, as: 'bank', required: false },
         {
           model: InstallmentOccurrence,
           as: 'occurrences',
@@ -66,8 +74,10 @@ export class InstallmentsService {
   }
 
   async findOne(id: number): Promise<Installment> {
+    await this.markOverdueOccurrences();
+
     const installment = await this.installmentModel.findByPk(id, {
-      include: [{ model: InstallmentOccurrence, as: 'occurrences', required: false }],
+      include: this.defaultIncludes(),
       order: [[{ model: InstallmentOccurrence, as: 'occurrences' }, 'occurrenceNumber', 'ASC']],
     });
 
@@ -179,6 +189,29 @@ export class InstallmentsService {
     });
 
     return occurrences.map((occurrence) => occurrence.dueDate);
+  }
+
+  private defaultIncludes() {
+    return [
+      { model: Category, as: 'category', required: false },
+      { model: Bank, as: 'bank', required: false },
+      { model: InstallmentOccurrence, as: 'occurrences', required: false },
+    ];
+  }
+
+  private async markOverdueOccurrences(): Promise<void> {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    await this.installmentOccurrenceModel.update(
+      { status: OccurrenceStatus.LATE },
+      {
+        where: {
+          status: OccurrenceStatus.PENDING,
+          dueDate: { [Op.lt]: startOfDay },
+        },
+      },
+    );
   }
 
   private async ensureOccurrences(installment: Installment): Promise<void> {

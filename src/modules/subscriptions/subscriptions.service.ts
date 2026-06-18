@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, WhereOptions } from 'sequelize';
+import { Bank } from '../../models/bank.model';
+import { Category } from '../../models/category.model';
 import { Subscription, SubscriptionFrequency } from '../../models/subscription.model';
 import { SubscriptionOccurrence } from '../../models/subscription-occurrence.model';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
@@ -53,13 +55,17 @@ export class SubscriptionsService {
   }
 
   async findAll(): Promise<Subscription[]> {
+    await this.markOverdueOccurrences();
+
     return this.subscriptionModel.findAll({
-      include: [{ model: SubscriptionOccurrence, as: 'occurrences', required: false }],
+      include: this.defaultIncludes(),
       order: [['name', 'ASC']],
     });
   }
 
   async findActive(): Promise<Subscription[]> {
+    await this.markOverdueOccurrences();
+
     const where: WhereOptions<Subscription> = {
       isActive: true,
       [Op.or]: [{ endDate: null }, { endDate: { [Op.gte]: new Date() } }],
@@ -67,14 +73,16 @@ export class SubscriptionsService {
 
     return this.subscriptionModel.findAll({
       where,
-      include: [{ model: SubscriptionOccurrence, as: 'occurrences', required: false }],
+      include: this.defaultIncludes(),
       order: [['name', 'ASC']],
     });
   }
 
   async findOne(id: number): Promise<Subscription> {
+    await this.markOverdueOccurrences();
+
     const subscription = await this.subscriptionModel.findByPk(id, {
-      include: [{ model: SubscriptionOccurrence, as: 'occurrences', required: false }],
+      include: this.defaultIncludes(),
     });
 
     if (!subscription) {
@@ -138,6 +146,29 @@ export class SubscriptionsService {
     await subscription.update({ isActive: true });
     await this.ensureFutureOccurrences(subscription);
     return this.findOne(id);
+  }
+
+  private defaultIncludes() {
+    return [
+      { model: Category, as: 'category', required: false },
+      { model: Bank, as: 'bank', required: false },
+      { model: SubscriptionOccurrence, as: 'occurrences', required: false },
+    ];
+  }
+
+  private async markOverdueOccurrences(): Promise<void> {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    await this.subscriptionOccurrenceModel.update(
+      { status: OccurrenceStatus.LATE },
+      {
+        where: {
+          status: OccurrenceStatus.PENDING,
+          dueDate: { [Op.lt]: startOfDay },
+        },
+      },
+    );
   }
 
   private validateSchedule(
