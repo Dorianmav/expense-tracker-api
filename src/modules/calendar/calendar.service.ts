@@ -28,6 +28,8 @@ export class CalendarService {
     private subscriptionModel: typeof Subscription,
     @InjectModel(SubscriptionOccurrence)
     private subscriptionOccurrenceModel: typeof SubscriptionOccurrence,
+    @InjectModel(Installment)
+    private installmentModel: typeof Installment,
     @InjectModel(InstallmentOccurrence)
     private installmentOccurrenceModel: typeof InstallmentOccurrence,
   ) {}
@@ -151,6 +153,7 @@ export class CalendarService {
     }
 
     await occurrence.update(values);
+    await this.refreshInstallmentCompletion(occurrence.installmentId);
     return { status };
   }
 
@@ -210,5 +213,19 @@ export class CalendarService {
       this.subscriptionOccurrenceModel.update({ status: OccurrenceStatus.LATE }, { where }),
       this.installmentOccurrenceModel.update({ status: OccurrenceStatus.LATE }, { where }),
     ]);
+  }
+
+  private async refreshInstallmentCompletion(installmentId: number): Promise<void> {
+    const remaining = await this.installmentOccurrenceModel.count({
+      where: {
+        installmentId,
+        status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] },
+      },
+    });
+
+    await this.installmentModel.update(
+      { isCompleted: remaining === 0 },
+      { where: { id: installmentId } },
+    );
   }
 }

@@ -57,18 +57,20 @@ export class InstallmentsService {
   async findActive(): Promise<Installment[]> {
     await this.markOverdueOccurrences();
 
+    const activeRows = await this.installmentOccurrenceModel.findAll({
+      attributes: ['installmentId'],
+      where: { status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] } },
+      group: ['installmentId'],
+    });
+    const activeIds = activeRows.map((occurrence) => occurrence.installmentId);
+
+    if (activeIds.length === 0) {
+      return [];
+    }
+
     return this.installmentModel.findAll({
-      where: { isCompleted: false },
-      include: [
-        { model: Category, as: 'category', required: false },
-        { model: Bank, as: 'bank', required: false },
-        {
-          model: InstallmentOccurrence,
-          as: 'occurrences',
-          required: true,
-          where: { status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] } },
-        },
-      ],
+      where: { id: { [Op.in]: activeIds } },
+      include: this.defaultIncludes(),
       order: [[{ model: InstallmentOccurrence, as: 'occurrences' }, 'dueDate', 'ASC']],
     });
   }
