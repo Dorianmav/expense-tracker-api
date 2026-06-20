@@ -1,57 +1,90 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
+import { Bank } from '../../models/bank.model';
+import { Category } from '../../models/category.model';
 import { Installment } from '../../models/installment.model';
+import { InstallmentOccurrence } from '../../models/installment-occurrence.model';
 import { CreateInstallmentDto } from './dto/create-installment.dto';
 import { UpdateInstallmentDto } from './dto/update-installment.dto';
 import { InstallmentCreationAttributes } from '../../types/interfaces';
-import { parseFrenchDate, parseFrenchDateArray } from '../../utils';
+import { OccurrenceStatus } from '../../models/occurrence-status.enum';
+import { generateInstallmentDueDates, parseFrenchDate, parseFrenchDateArray } from '../../utils';
 
 @Injectable()
 export class InstallmentsService {
   constructor(
     @InjectModel(Installment)
     private installmentModel: typeof Installment,
+    @InjectModel(InstallmentOccurrence)
+    private installmentOccurrenceModel: typeof InstallmentOccurrence,
   ) {}
 
   async create(createInstallmentDto: CreateInstallmentDto): Promise<Installment> {
-    // Préparer les données pour Sequelize avec conversion de dates
+    const startDate = parseFrenchDate(createInstallmentDto.startDate);
+    const customPaymentDates = createInstallmentDto.customPaymentDates
+      ? parseFrenchDateArray(createInstallmentDto.customPaymentDates)
+      : undefined;
+
     const installmentData: InstallmentCreationAttributes = {
       name: createInstallmentDto.name,
       totalAmount: createInstallmentDto.totalAmount,
-      remainingAmount: createInstallmentDto.remainingAmount,
       numberOfPayments: createInstallmentDto.numberOfPayments,
-      remainingPayments: createInstallmentDto.remainingPayments,
+      startDate,
       isCompleted: createInstallmentDto.isCompleted || false,
-      nextPaymentDate: createInstallmentDto.nextPaymentDate ? parseFrenchDate(createInstallmentDto.nextPaymentDate) : undefined,
-      customPaymentDates: createInstallmentDto.customPaymentDates ? parseFrenchDateArray(createInstallmentDto.customPaymentDates) : undefined,
+      nextPaymentDate: createInstallmentDto.nextPaymentDate
+        ? parseFrenchDate(createInstallmentDto.nextPaymentDate)
+        : startDate,
+      customPaymentDates,
+      categoryId: createInstallmentDto.categoryId,
+      bankId: createInstallmentDto.bankId,
     };
-    
-    return this.installmentModel.create(installmentData);
+
+    const installment = await this.installmentModel.create(installmentData);
+    await this.ensureOccurrences(installment);
+    return this.findOne(installment.id);
   }
 
-
   async findAll(): Promise<Installment[]> {
+    await this.markOverdueOccurrences();
+
     return this.installmentModel.findAll({
+      include: this.defaultIncludes(),
       order: [['name', 'ASC']],
     });
   }
 
   async findActive(): Promise<Installment[]> {
+    await this.markOverdueOccurrences();
+
+    const activeRows = await this.installmentOccurrenceModel.findAll({
+      attributes: ['installmentId'],
+      where: { status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] } },
+      group: ['installmentId'],
+    });
+    const activeIds = activeRows.map((occurrence) => occurrence.installmentId);
+
+    if (activeIds.length === 0) {
+      return [];
+    }
+
     return this.installmentModel.findAll({
-      where: { 
-        isCompleted: false,
-        remainingPayments: { [Op.gt]: 0 }
-      },
-      order: [['nextPaymentDate', 'ASC']],
+      where: { id: { [Op.in]: activeIds } },
+      include: this.defaultIncludes(),
+      order: [[{ model: InstallmentOccurrence, as: 'occurrences' }, 'dueDate', 'ASC']],
     });
   }
 
   async findOne(id: number): Promise<Installment> {
-    const installment = await this.installmentModel.findByPk(id);
+    await this.markOverdueOccurrences();
+
+    const installment = await this.installmentModel.findByPk(id, {
+      include: this.defaultIncludes(),
+      order: [[{ model: InstallmentOccurrence, as: 'occurrences' }, 'occurrenceNumber', 'ASC']],
+    });
 
     if (!installment) {
-      throw new NotFoundException(`Paiement échelonné avec l'ID ${id} non trouvé`);
+      throw new NotFoundException(`Paiement echelonne avec l'ID ${id} non trouve`);
     }
 
     return installment;
@@ -59,29 +92,35 @@ export class InstallmentsService {
 
   async update(id: number, updateInstallmentDto: UpdateInstallmentDto): Promise<Installment> {
     const installment = await this.findOne(id);
-    
-    // Préparer les données de mise à jour avec conversion de dates
     const updateData: Partial<InstallmentCreationAttributes> = {};
-    
-    // Copier les propriétés modifiées
+
     if (updateInstallmentDto.name !== undefined) updateData.name = updateInstallmentDto.name;
-    if (updateInstallmentDto.totalAmount !== undefined) updateData.totalAmount = updateInstallmentDto.totalAmount;
-    if (updateInstallmentDto.remainingAmount !== undefined) updateData.remainingAmount = updateInstallmentDto.remainingAmount;
-    if (updateInstallmentDto.numberOfPayments !== undefined) updateData.numberOfPayments = updateInstallmentDto.numberOfPayments;
-    if (updateInstallmentDto.remainingPayments !== undefined) updateData.remainingPayments = updateInstallmentDto.remainingPayments;
-    if (updateInstallmentDto.isCompleted !== undefined) updateData.isCompleted = updateInstallmentDto.isCompleted;
-    
-    // Convertir les dates string en objets Date si fournies
+    if (updateInstallmentDto.totalAmount !== undefined)
+      updateData.totalAmount = updateInstallmentDto.totalAmount;
+    if (updateInstallmentDto.numberOfPayments !== undefined) {
+      updateData.numberOfPayments = updateInstallmentDto.numberOfPayments;
+    }
+    if (updateInstallmentDto.isCompleted !== undefined)
+      updateData.isCompleted = updateInstallmentDto.isCompleted;
+    if (updateInstallmentDto.categoryId !== undefined)
+      updateData.categoryId = updateInstallmentDto.categoryId;
+    if (updateInstallmentDto.bankId !== undefined) updateData.bankId = updateInstallmentDto.bankId;
+
+    if (updateInstallmentDto.startDate) {
+      updateData.startDate = parseFrenchDate(updateInstallmentDto.startDate);
+    }
+
     if (updateInstallmentDto.nextPaymentDate) {
       updateData.nextPaymentDate = parseFrenchDate(updateInstallmentDto.nextPaymentDate);
     }
-    
+
     if (updateInstallmentDto.customPaymentDates) {
       updateData.customPaymentDates = parseFrenchDateArray(updateInstallmentDto.customPaymentDates);
     }
-    
+
     await installment.update(updateData);
-    return installment;
+    await this.ensureOccurrences(installment);
+    return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
@@ -91,98 +130,131 @@ export class InstallmentsService {
 
   async markAsCompleted(id: number): Promise<Installment> {
     const installment = await this.findOne(id);
-    await installment.update({ 
-      isCompleted: true,
-      remainingPayments: 0,
-      remainingAmount: 0,
-      nextPaymentDate: undefined
-    });
-    return installment;
+    await this.installmentOccurrenceModel.update(
+      { status: OccurrenceStatus.PAID },
+      {
+        where: {
+          installmentId: id,
+          status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] },
+        },
+      },
+    );
+    await installment.update({ isCompleted: true, nextPaymentDate: null });
+    return this.findOne(id);
   }
 
   async processPayment(id: number, paymentAmount: number): Promise<Installment> {
-    const installment = await this.findOne(id);
-    
-    const newRemainingAmount = Math.max(0, installment.remainingAmount - paymentAmount);
-    const newRemainingPayments = Math.max(0, installment.remainingPayments - 1);
-    
-    let nextPaymentDate: Date | undefined = installment.nextPaymentDate;
-    
-    // Si des dates personnalisées sont définies, utiliser la prochaine date de la liste
-    if (installment.customPaymentDates && installment.customPaymentDates.length > 0) {
-      const currentPaymentIndex = installment.numberOfPayments - installment.remainingPayments;
-      const nextPaymentIndex = currentPaymentIndex + 1;
-      
-      if (nextPaymentIndex < installment.customPaymentDates.length) {
-        nextPaymentDate = new Date(installment.customPaymentDates[nextPaymentIndex]);
-      } else {
-        nextPaymentDate = undefined; // Plus de paiements programmés
-      }
-    } else if (newRemainingPayments > 0 && nextPaymentDate) {
-      // Logique par défaut : ajouter 1 mois
-      const nextDate = new Date(nextPaymentDate);
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      nextPaymentDate = nextDate;
-    } else {
-      nextPaymentDate = undefined;
-    }
-
-    await installment.update({
-      remainingAmount: newRemainingAmount,
-      remainingPayments: newRemainingPayments,
-      nextPaymentDate,
-      isCompleted: newRemainingPayments === 0
+    await this.findOne(id);
+    const occurrence = await this.installmentOccurrenceModel.findOne({
+      where: {
+        installmentId: id,
+        status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] },
+      },
+      order: [['dueDate', 'ASC']],
     });
 
-    return installment;
+    if (!occurrence) {
+      throw new NotFoundException(`Aucune occurrence a payer pour le paiement echelonne ${id}`);
+    }
+
+    await occurrence.update({
+      amount: paymentAmount,
+      paidDate: new Date(),
+      status: OccurrenceStatus.PAID,
+    });
+
+    await this.refreshCompletion(id);
+    return this.findOne(id);
   }
 
   async getNextPaymentDate(id: number): Promise<Date | null> {
-    const installment = await this.findOne(id);
-    
-    if (installment.isCompleted || installment.remainingPayments === 0) {
-      return null;
-    }
+    await this.findOne(id);
+    const occurrence = await this.installmentOccurrenceModel.findOne({
+      where: {
+        installmentId: id,
+        status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] },
+      },
+      order: [['dueDate', 'ASC']],
+    });
 
-    // Si des dates personnalisées sont définies
-    if (installment.customPaymentDates && installment.customPaymentDates.length > 0) {
-      const currentPaymentIndex = installment.numberOfPayments - installment.remainingPayments;
-      
-      if (currentPaymentIndex < installment.customPaymentDates.length) {
-        return new Date(installment.customPaymentDates[currentPaymentIndex]);
-      }
-    }
-
-    // Sinon, retourner la nextPaymentDate calculée automatiquement
-    return installment.nextPaymentDate;
+    return occurrence?.dueDate ?? null;
   }
 
   async getAllUpcomingPayments(id: number): Promise<Date[]> {
-    const installment = await this.findOne(id);
-    
-    if (installment.isCompleted || installment.remainingPayments === 0) {
-      return [];
+    await this.findOne(id);
+    const occurrences = await this.installmentOccurrenceModel.findAll({
+      where: {
+        installmentId: id,
+        status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] },
+      },
+      order: [['dueDate', 'ASC']],
+    });
+
+    return occurrences.map((occurrence) => occurrence.dueDate);
+  }
+
+  private defaultIncludes() {
+    return [
+      { model: Category, as: 'category', required: false },
+      { model: Bank, as: 'bank', required: false },
+      { model: InstallmentOccurrence, as: 'occurrences', required: false },
+    ];
+  }
+
+  private async markOverdueOccurrences(): Promise<void> {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    await this.installmentOccurrenceModel.update(
+      { status: OccurrenceStatus.LATE },
+      {
+        where: {
+          status: OccurrenceStatus.PENDING,
+          dueDate: { [Op.lt]: startOfDay },
+        },
+      },
+    );
+  }
+
+  private async ensureOccurrences(installment: Installment): Promise<void> {
+    const dueDates = generateInstallmentDueDates(
+      new Date(installment.startDate),
+      installment.numberOfPayments,
+      installment.customPaymentDates,
+    );
+    const amount = Number(
+      (Number(installment.totalAmount) / installment.numberOfPayments).toFixed(2),
+    );
+
+    for (let index = 0; index < dueDates.length; index++) {
+      const dueDate = dueDates[index];
+      await this.installmentOccurrenceModel.findOrCreate({
+        where: {
+          installmentId: installment.id,
+          occurrenceNumber: index + 1,
+        },
+        defaults: {
+          installmentId: installment.id,
+          occurrenceNumber: index + 1,
+          dueDate,
+          amount,
+          status: dueDate < new Date() ? OccurrenceStatus.LATE : OccurrenceStatus.PENDING,
+        },
+      });
     }
+  }
 
-    const upcomingDates: Date[] = [];
+  private async refreshCompletion(installmentId: number): Promise<void> {
+    const remaining = await this.installmentOccurrenceModel.count({
+      where: {
+        installmentId,
+        status: { [Op.in]: [OccurrenceStatus.PENDING, OccurrenceStatus.LATE] },
+      },
+    });
 
-    // Si des dates personnalisées sont définies
-    if (installment.customPaymentDates && installment.customPaymentDates.length > 0) {
-      const currentPaymentIndex = installment.numberOfPayments - installment.remainingPayments;
-      
-      for (let i = currentPaymentIndex; i < installment.customPaymentDates.length; i++) {
-        upcomingDates.push(new Date(installment.customPaymentDates[i]));
-      }
-    } else {
-      // Générer les dates automatiquement
-      let currentDate = installment.nextPaymentDate ? new Date(installment.nextPaymentDate) : new Date();
-      
-      for (let i = 0; i < installment.remainingPayments; i++) {
-        upcomingDates.push(new Date(currentDate));
-        currentDate.setMonth(currentDate.getMonth() + 1);
-      }
-    }
-
-    return upcomingDates;
+    await this.installmentModel.update(
+      { isCompleted: remaining === 0 },
+      { where: { id: installmentId } },
+    );
   }
 }

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { BusinessDateFormatInterceptor } from './common/interceptors/business-date-format.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,29 +22,37 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  app.useGlobalInterceptors(new BusinessDateFormatInterceptor());
 
   // Configuration Swagger pour la documentation API
   const config = new DocumentBuilder()
     .setTitle('Expense Tracker API')
-    .setDescription('API pour l\'application de suivi des dépenses')
+    .setDescription("API pour l'application de suivi des dépenses")
     .setVersion('1.0')
     .addTag('expenses', 'Gestion des dépenses')
     .addTag('categories', 'Gestion des catégories')
     .addTag('banks', 'Gestion des banques')
     .addTag('subscriptions', 'Gestion des abonnements')
     .addTag('installments', 'Gestion des paiements échelonnés')
+    .addTag('calendar', 'Projection calendrier')
     .addBearerAuth()
     .addSecurityRequirements('bearer')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api', app, document, {
+    swaggerOptions: {
+      operationsSorter: 'alpha',
+      tagsSorter: 'alpha',
+      persistAuthorization: true,
+    },
+  });
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  
+
   console.log(`🚀 Application démarrée sur le port ${port}`);
   console.log(`📚 Documentation Swagger disponible sur http://localhost:${port}/api`);
 }
 
-bootstrap();
+void bootstrap();

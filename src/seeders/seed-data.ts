@@ -73,9 +73,7 @@ export class SeedService implements OnModuleInit {
       { name: 'Revolut' },
     ];
 
-    return Promise.all(
-      banksData.map(bank => this.bankModel.create(bank))
-    );
+    return Promise.all(banksData.map((bank) => this.bankModel.create(bank)));
   }
 
   private async seedCategories(): Promise<Category[]> {
@@ -92,7 +90,7 @@ export class SeedService implements OnModuleInit {
     ];
 
     const createdMainCategories = await Promise.all(
-      mainCategories.map(category => this.categoryModel.create(category))
+      mainCategories.map((category) => this.categoryModel.create(category)),
     );
 
     // Sous-catégories
@@ -136,7 +134,7 @@ export class SeedService implements OnModuleInit {
     ];
 
     const createdSubCategories = await Promise.all(
-      subCategories.map(category => this.categoryModel.create(category))
+      subCategories.map((category) => this.categoryModel.create(category)),
     );
 
     return [...createdMainCategories, ...createdSubCategories];
@@ -179,7 +177,7 @@ export class SeedService implements OnModuleInit {
     ];
 
     return Promise.all(
-      subscriptionsData.map(subscription => this.subscriptionModel.create(subscription))
+      subscriptionsData.map((subscription) => this.subscriptionModel.create(subscription)),
     );
   }
 
@@ -188,9 +186,8 @@ export class SeedService implements OnModuleInit {
       {
         name: 'iPhone 15 Pro',
         totalAmount: 1199.99,
-        remainingAmount: 800.00,
         numberOfPayments: 12,
-        remainingPayments: 8,
+        startDate: new Date('2024-01-01'),
         nextPaymentDate: new Date('2024-03-01'),
         customPaymentDates: [
           new Date('2024-01-01'),
@@ -211,9 +208,8 @@ export class SeedService implements OnModuleInit {
       {
         name: 'MacBook Pro M3',
         totalAmount: 2499.99,
-        remainingAmount: 1666.66,
         numberOfPayments: 3,
-        remainingPayments: 2,
+        startDate: new Date('2024-01-15'),
         nextPaymentDate: new Date('2024-03-15'),
         customPaymentDates: [
           new Date('2024-01-15'),
@@ -225,7 +221,7 @@ export class SeedService implements OnModuleInit {
     ];
 
     return Promise.all(
-      installmentsData.map(installment => this.installmentModel.create(installment))
+      installmentsData.map((installment) => this.installmentModel.create(installment)),
     );
   }
 
@@ -233,7 +229,7 @@ export class SeedService implements OnModuleInit {
     categories: Category[],
     banks: Bank[],
     subscriptions: Subscription[],
-    installments: Installment[]
+    installments: Installment[],
   ): Promise<Expense[]> {
     const today = new Date();
     const yesterday = new Date(today);
@@ -246,57 +242,45 @@ export class SeedService implements OnModuleInit {
         date: today,
         description: 'Courses du weekend',
         type: ExpenseType.SIMPLE,
-        categoryId: categories.find(c => c.name === 'Courses')?.id || 1,
+        categoryId: categories.find((c) => c.name === 'Courses')?.id || 1,
         bankId: banks[0].id,
-        subscriptionId: undefined,
-        installmentId: undefined,
       },
       {
-        amount: 12.50,
+        amount: 12.5,
         date: today,
         description: 'Déjeuner restaurant',
         type: ExpenseType.SIMPLE,
-        categoryId: categories.find(c => c.name === 'Restaurant')?.id || 1,
+        categoryId: categories.find((c) => c.name === 'Restaurant')?.id || 1,
         bankId: banks[1].id,
-        subscriptionId: undefined,
-        installmentId: undefined,
       },
       {
         amount: 15.99,
         date: today,
         description: 'Netflix Premium',
         type: ExpenseType.SUBSCRIPTION,
-        categoryId: categories.find(c => c.name === 'Streaming')?.id || 1,
+        categoryId: categories.find((c) => c.name === 'Streaming')?.id || 1,
         bankId: banks[0].id,
-        subscriptionId: subscriptions[0].id,
-        installmentId: undefined,
       },
 
       // Dépenses d'hier
       {
-        amount: 35.00,
+        amount: 35.0,
         date: yesterday,
-        description: 'Plein d\'essence',
+        description: "Plein d'essence",
         type: ExpenseType.SIMPLE,
-        categoryId: categories.find(c => c.name === 'Essence')?.id || 1,
+        categoryId: categories.find((c) => c.name === 'Essence')?.id || 1,
         bankId: banks[2].id,
-        subscriptionId: undefined,
-        installmentId: undefined,
       },
       {
         amount: 99.99,
         date: yesterday,
         description: 'iPhone 15 Pro - Paiement 4/12',
         type: ExpenseType.INSTALLMENT,
-        categoryId: categories.find(c => c.name === 'Électronique')?.id || 1,
+        categoryId: categories.find((c) => c.name === 'Électronique')?.id || 1,
         bankId: banks[0].id,
-        subscriptionId: undefined,
-        installmentId: installments[0].id,
       },
     ];
 
-    return Promise.all(
-      expensesData.map(expense => this.expenseModel.create(expense))
-    );
+    return Promise.all(expensesData.map((expense) => this.expenseModel.create(expense)));
   }
 }

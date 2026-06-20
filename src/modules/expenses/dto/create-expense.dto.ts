@@ -1,20 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { 
-  IsString, 
-  IsNumber, 
-  IsEnum, 
+import {
+  IsEnum,
+  IsHexColor,
   IsInt,
+  IsNumber,
   IsOptional,
-  MinLength, 
-  MaxLength, 
-  Min 
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
 } from 'class-validator';
-import { ExpenseType } from '../../../models/expense.model';
+import { ExpenseSource, ExpenseType } from '../../../models/expense.model';
 import { IsFrenchDate } from '../../../utils';
 
 export class CreateExpenseDto {
-  @ApiProperty({ 
-    description: 'Montant de la dépense',
+  @ApiProperty({
+    description: 'Montant de la depense',
     example: 25.99,
     minimum: 0,
   })
@@ -22,15 +23,15 @@ export class CreateExpenseDto {
   @Min(0)
   amount: number;
 
-  @ApiProperty({ 
-    description: 'Date de la dépense au format DD/MM/YYYY',
+  @ApiProperty({
+    description: 'Date de la depense au format DD/MM/YYYY',
     example: '15/01/2024',
   })
   @IsFrenchDate()
   date: string;
 
-  @ApiProperty({ 
-    description: 'Description de la dépense',
+  @ApiProperty({
+    description: 'Description de la depense',
     example: 'Repas du midi au restaurant',
     minLength: 1,
     maxLength: 500,
@@ -40,23 +41,42 @@ export class CreateExpenseDto {
   @MaxLength(500)
   description: string;
 
-  @ApiProperty({ 
-    description: 'Type de dépense',
+  @ApiProperty({
+    description: 'Couleur optionnelle de la depense',
+    example: '#2F80ED',
+    required: false,
+  })
+  @IsOptional()
+  @IsHexColor()
+  color?: string;
+
+  @ApiProperty({
+    description: 'Type de depense',
     enum: ExpenseType,
     example: ExpenseType.SIMPLE,
   })
   @IsEnum(ExpenseType)
   type: ExpenseType;
 
-  @ApiProperty({ 
-    description: 'ID de la catégorie',
+  @ApiProperty({
+    description: 'Source de la depense',
+    enum: ExpenseSource,
+    example: ExpenseSource.MANUAL,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(ExpenseSource)
+  source?: ExpenseSource;
+
+  @ApiProperty({
+    description: 'ID de la categorie',
     example: 1,
   })
   @IsInt()
   @Min(1)
   categoryId: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID de la banque',
     example: 1,
   })
@@ -64,23 +84,13 @@ export class CreateExpenseDto {
   @Min(1)
   bankId: number;
 
-  @ApiProperty({ 
-    description: 'ID de l\'abonnement (si applicable)',
+  @ApiProperty({
+    description: 'ID de l occurrence payee pour un abonnement ou echeancier',
     example: 1,
     required: false,
   })
   @IsOptional()
   @IsInt()
   @Min(1)
-  subscriptionId?: number;
-
-  @ApiProperty({ 
-    description: 'ID du paiement échelonné (si applicable)',
-    example: 1,
-    required: false,
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  installmentId?: number;
+  occurrenceId?: number;
 }
